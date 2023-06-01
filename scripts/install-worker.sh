@@ -73,8 +73,8 @@ sudo yum install -y \
   yum-plugin-versionlock \
   htop \
   vim \
-  yum-utils \
-  mdadm
+  mdadm \
+  pigz
 
 # Remove any old kernel versions. `--count=1` here means "only leave 1 kernel version installed"
 sudo package-cleanup --oldkernels --count=1 -y
@@ -124,7 +124,9 @@ sudo mv $TEMPLATE_DIR/iptables-restore.service /etc/eks/iptables-restore.service
 ### awscli #####################################################
 ################################################################################
 
-if [[ "$BINARY_BUCKET_REGION" != "us-iso-east-1" && "$BINARY_BUCKET_REGION" != "us-isob-east-1" ]]; then
+### isolated regions can't communicate to awscli.amazonaws.com so installing awscli through yum
+ISOLATED_REGIONS="${ISOLATED_REGIONS:-us-iso-east-1 us-iso-west-1 us-isob-east-1}"
+if ! [[ ${ISOLATED_REGIONS} =~ $BINARY_BUCKET_REGION ]]; then
   # https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html
   echo "Installing awscli v2 bundle"
   AWSCLI_DIR=$(mktemp -d)
@@ -249,7 +251,7 @@ echo "Downloading binaries from: s3://$BINARY_BUCKET_NAME"
 S3_DOMAIN="amazonaws.com"
 if [ "$BINARY_BUCKET_REGION" = "cn-north-1" ] || [ "$BINARY_BUCKET_REGION" = "cn-northwest-1" ]; then
   S3_DOMAIN="amazonaws.com.cn"
-elif [ "$BINARY_BUCKET_REGION" = "us-iso-east-1" ]; then
+elif [ "$BINARY_BUCKET_REGION" = "us-iso-east-1" ] || [ "$BINARY_BUCKET_REGION" = "us-iso-west-1" ]; then
   S3_DOMAIN="c2s.ic.gov"
 elif [ "$BINARY_BUCKET_REGION" = "us-isob-east-1" ]; then
   S3_DOMAIN="sc2s.sgov.gov"
@@ -371,7 +373,8 @@ sudo mv $TEMPLATE_DIR/ecr-credential-provider-config.json /etc/eks/image-credent
 ################################################################################
 ### Cache Images ###############################################################
 ################################################################################
-if [[ "$CACHE_CONTAINER_IMAGES" == "true" && "$BINARY_BUCKET_REGION" != "us-iso-east-1" && "$BINARY_BUCKET_REGION" != "us-isob-east-1" ]]; then
+
+if [[ "$CACHE_CONTAINER_IMAGES" == "true" ]] && ! [[ ${ISOLATED_REGIONS} =~ $BINARY_BUCKET_REGION ]]; then
   AWS_DOMAIN=$(imds 'latest/meta-data/services/domain')
   ECR_URI=$(/etc/eks/get-ecr-uri.sh "${BINARY_BUCKET_REGION}" "${AWS_DOMAIN}")
 
@@ -486,16 +489,17 @@ if [[ "$CACHE_CONTAINER_IMAGES" == "true" && "$BINARY_BUCKET_REGION" != "us-iso-
 
   ecr_password=$(aws ecr get-login-password --region "eu-central-1")
 
-  sudo ctr --namespace k8s.io image pull public.ecr.aws/eks-distro/coredns/coredns:v1.9.3-eks-1-26-7
+  sudo ctr --namespace k8s.io image pull public.ecr.aws/eks-distro/coredns/coredns:v1.10.1-eks-1-27-4
   sudo ctr --namespace k8s.io image pull public.ecr.aws/aws-ec2/aws-node-termination-handler:v1.19.0
-  sudo ctr --namespace k8s.io image pull public.ecr.aws/aws-observability/aws-for-fluent-bit:2.31.9
-  sudo ctr --namespace k8s.io image pull public.ecr.aws/ebs-csi-driver/aws-ebs-csi-driver:v1.18.0
+  sudo ctr --namespace k8s.io image pull public.ecr.aws/aws-observability/aws-for-fluent-bit:2.31.11
+  sudo ctr --namespace k8s.io image pull public.ecr.aws/ebs-csi-driver/aws-ebs-csi-driver:v1.19.0
   sudo ctr --namespace k8s.io image pull ghcr.io/sylr/traefik:v2.9.10_sylr.2
-  sudo ctr --namespace k8s.io image pull k8s.gcr.io/sig-storage/csi-node-driver-registrar:v2.7.0
-  sudo ctr --namespace k8s.io image pull k8s.gcr.io/sig-storage/livenessprobe:v2.9.0
-  sudo ctr --namespace k8s.io image pull quay.io/cilium/cilium:v1.13.2
-  sudo ctr --namespace k8s.io image pull quay.io/cilium/startup-script:5e928f628f9fc644a1d2651d6cd6aecbde0e7acd
-  sudo ctr --namespace k8s.io image pull quay.io/prometheus/node-exporter:v1.5.0
+  sudo ctr --namespace k8s.io image pull ghcr.io/sylr/traefik:v2.10.1_sylr.1
+  sudo ctr --namespace k8s.io image pull public.ecr.aws/eks-distro/kubernetes-csi/node-driver-registrar:v2.8.0-eks-1-27-4
+  sudo ctr --namespace k8s.io image pull public.ecr.aws/eks-distro/kubernetes-csi/livenessprobe:v2.10.0-eks-1-27-4
+  sudo ctr --namespace k8s.io image pull quay.io/cilium/cilium:v1.13.3
+  sudo ctr --namespace k8s.io image pull quay.io/cilium/startup-script:62093c5c233ea914bfa26a10ba41f8780d9b737f
+  sudo ctr --namespace k8s.io image pull quay.io/prometheus/node-exporter:v1.6.0
 
 fi
 
