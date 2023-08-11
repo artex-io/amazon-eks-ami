@@ -1,5 +1,5 @@
 {
-  "_comment": "All template variables are enumerated here; and most variables have a default value defined in eks-worker-al2-variables.json",
+  "_comment": "All template variables are enumerated here; and most variables have a default value defined in eks-worker-al2023-variables.json",
   "variables": {
     "additional_yum_repos": null,
     "ami_component_description": null,
@@ -40,7 +40,8 @@
     "subnet_id": null,
     "temporary_security_group_source_cidrs": null,
     "volume_type": null,
-    "working_dir": null
+    "working_dir": null,
+    "temporary_key_pair_type": "ed25519"
   },
   "builders": [
     {
@@ -110,8 +111,7 @@
         "kubernetes": "{{ user `kubernetes_version`}}/{{ user `kubernetes_build_date` }}/bin/linux/{{ user `arch` }}",
         "cni_plugin_version": "{{ user `cni_plugin_version`}}"
       },
-      "vpc_filter": {
-      },
+      "vpc_filter": {},
       "subnet_filter": {
         "filters": {
           "tag:kubernetes.io/role/internal-elb": "1"
@@ -153,17 +153,6 @@
       "inline": [
         "sudo chmod -R a+x {{user `working_dir`}}/bin/",
         "sudo mv {{user `working_dir`}}/bin/* /usr/bin/"
-      ]
-    },
-    {
-      "type": "shell",
-      "remote_folder": "{{ user `remote_folder`}}",
-      "expect_disconnect": true,
-      "pause_after": "90s",
-      "script": "{{template_dir}}/scripts/upgrade_kernel.sh",
-      "environment_vars": [
-        "KUBERNETES_VERSION={{user `kubernetes_version`}}",
-        "KERNEL_VERSION={{user `kernel_version`}}"
       ]
     },
     {
