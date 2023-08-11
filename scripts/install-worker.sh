@@ -474,23 +474,26 @@ if [[ "$CACHE_CONTAINER_IMAGES" == "true" ]] && ! [[ ${ISOLATED_REGIONS} =~ $BIN
   ### Pre pull images ############################################################
   ################################################################################
 
-  # kubectl -n kube-system -o json get deployment coredns | jq -r '.spec.template.spec.containers[].image'
-  # kubectl -n ingress -o json get deployment traefik | jq -r '.spec.template.spec.containers[].image'
-  # kubectl get daemonset -o json --all-namespaces | jq -r '.items[].spec.template.spec.containers[].image' | sort
 
   ecr_password=$(aws ecr get-login-password --region "eu-central-1")
 
-  sudo ctr --namespace k8s.io image pull public.ecr.aws/eks-distro/coredns/coredns:v1.10.1-eks-1-27-4
-  sudo ctr --namespace k8s.io image pull public.ecr.aws/aws-ec2/aws-node-termination-handler:v1.19.0
-  sudo ctr --namespace k8s.io image pull public.ecr.aws/aws-observability/aws-for-fluent-bit:2.31.11
-  sudo ctr --namespace k8s.io image pull public.ecr.aws/ebs-csi-driver/aws-ebs-csi-driver:v1.19.0
-  sudo ctr --namespace k8s.io image pull ghcr.io/sylr/traefik:v2.9.10_sylr.2
+  # kubectl -n kube-system -o json get deployment coredns | jq -r '.spec.template.spec.containers[] | "sudo ctr --namespace k8s.io image pull "+ .image'
+  sudo ctr --namespace k8s.io image pull public.ecr.aws/eks-distro/coredns/coredns:v1.10.1-eks-1-27-6
+
+  # kubectl -n ingress -o json get deployment traefik | jq -r '.spec.template.spec.containers[] | "sudo ctr --namespace k8s.io image pull "+ .image'
   sudo ctr --namespace k8s.io image pull ghcr.io/sylr/traefik:v2.10.1_sylr.1
-  sudo ctr --namespace k8s.io image pull public.ecr.aws/eks-distro/kubernetes-csi/node-driver-registrar:v2.8.0-eks-1-27-4
-  sudo ctr --namespace k8s.io image pull public.ecr.aws/eks-distro/kubernetes-csi/livenessprobe:v2.10.0-eks-1-27-4
-  sudo ctr --namespace k8s.io image pull quay.io/cilium/cilium:v1.13.3
+  sudo ctr --namespace k8s.io image pull ghcr.io/sylr/traefik:v2.10.4_sylr.1
+  
+  # kubectl get daemonset -o json --all-namespaces | jq -r '.items[].spec.template.spec.containers[] | "sudo ctr --namespace k8s.io image pull "+ .image' | sort
+  sudo ctr --namespace k8s.io image pull public.ecr.aws/aws-ec2/aws-node-termination-handler:v1.20.0
+  sudo ctr --namespace k8s.io image pull public.ecr.aws/aws-observability/aws-for-fluent-bit:2.31.12.20230629
+  sudo ctr --namespace k8s.io image pull public.ecr.aws/ebs-csi-driver/aws-ebs-csi-driver:v1.20.0
+  sudo ctr --namespace k8s.io image pull public.ecr.aws/eks-distro/kubernetes-csi/livenessprobe:v2.10.0-eks-1-27-6
+  sudo ctr --namespace k8s.io image pull public.ecr.aws/eks-distro/kubernetes-csi/node-driver-registrar:v2.8.0-eks-1-27-6
+  sudo ctr --namespace k8s.io image pull quay.io/cilium/cilium:v1.13.5
   sudo ctr --namespace k8s.io image pull quay.io/cilium/startup-script:62093c5c233ea914bfa26a10ba41f8780d9b737f
-  sudo ctr --namespace k8s.io image pull quay.io/prometheus/node-exporter:v1.6.0
+  sudo ctr --namespace k8s.io image pull quay/prometheus/node-exporter:v1.6.1
+  sudo ctr --namespace k8s.io image pull quay.io/signalfx/splunk-otel-collector:0.75.0
 
 fi
 
