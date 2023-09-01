@@ -490,7 +490,8 @@ if [[ "$CACHE_CONTAINER_IMAGES" == "true" ]] && ! [[ ${ISOLATED_REGIONS} =~ $BIN
   sudo ctr --namespace k8s.io image pull public.ecr.aws/ebs-csi-driver/aws-ebs-csi-driver:v1.20.0
   sudo ctr --namespace k8s.io image pull public.ecr.aws/eks-distro/kubernetes-csi/livenessprobe:v2.10.0-eks-1-27-6
   sudo ctr --namespace k8s.io image pull public.ecr.aws/eks-distro/kubernetes-csi/node-driver-registrar:v2.8.0-eks-1-27-6
-  sudo ctr --namespace k8s.io image pull quay.io/cilium/cilium:v1.13.5
+  sudo ctr --namespace k8s.io image pull quay.io/cilium/cilium:v1.13.4
+  sudo ctr --namespace k8s.io image pull quay.io/cilium/cilium:v1.13.6
   sudo ctr --namespace k8s.io image pull quay.io/cilium/startup-script:62093c5c233ea914bfa26a10ba41f8780d9b737f
   sudo ctr --namespace k8s.io image pull quay.io/prometheus/node-exporter:v1.6.1
   sudo ctr --namespace k8s.io image pull quay.io/signalfx/splunk-otel-collector:0.75.0
