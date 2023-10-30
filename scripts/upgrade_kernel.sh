@@ -22,8 +22,12 @@ elif [[ $KERNEL_VERSION == "5.10" ]]; then
 elif [[ $KERNEL_VERSION == "5.15" ]]; then
   sudo amazon-linux-extras install -y kernel-5.15
 else
-  sudo amazon-linux-extras install -y "kernel-${KERNEL_VERSION}"
+  KERNEL_MINOR_VERSION=$(echo ${KERNEL_VERSION} | cut -d. -f-2)
+  sudo amazon-linux-extras enable "kernel-${KERNEL_MINOR_VERSION}"
+  sudo yum install -y "kernel-${KERNEL_VERSION}*"
 fi
+
+sudo yum install -y "kernel-headers-${KERNEL_VERSION}*" "kernel-devel-${KERNEL_VERSION}*"
 
 # enable pressure stall information
 sudo grubby \
@@ -35,5 +39,3 @@ sudo grubby \
 sudo grubby \
   --update-kernel=ALL \
   --args="clocksource=tsc tsc=reliable"
-
-sudo reboot

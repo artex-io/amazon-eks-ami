@@ -52,6 +52,13 @@ fi
 ### Packages ###################################################################
 ################################################################################
 
+sudo yum install -y \
+  yum-utils \
+  yum-plugin-versionlock
+
+# lock the version of the kernel and associated packages before we yum update
+sudo yum versionlock kernel-$(uname -r) kernel-headers-$(uname -r) kernel-devel-$(uname -r)
+
 # Update the OS to begin with to catch up to the latest packages.
 sudo yum update -y
 
@@ -89,8 +96,6 @@ else
   # curl-minimal already exists in al2023 so install curl only on al2
   sudo yum install -y curl
 fi
-
-sudo yum versionlock kernel-$(uname -r)
 
 # Remove the ec2-net-utils package, if it's installed. This package interferes with the route setup on the instance.
 if yum list installed | grep ec2-net-utils; then sudo yum remove ec2-net-utils -y -q; fi
@@ -173,8 +178,15 @@ sudo mv $WORKING_DIR/pull-sandbox-image.sh /etc/eks/containerd/pull-sandbox-imag
 sudo mv $WORKING_DIR/pull-image.sh /etc/eks/containerd/pull-image.sh
 sudo chmod +x /etc/eks/containerd/pull-sandbox-image.sh
 sudo chmod +x /etc/eks/containerd/pull-image.sh
-
 sudo mkdir -p /etc/systemd/system/containerd.service.d
+CONFIGURE_CONTAINERD_SLICE=$(vercmp "$KUBERNETES_VERSION" gteq "1.24.0" || true)
+if [ "$CONFIGURE_CONTAINERD_SLICE" == "true" ]; then
+  cat << EOF | sudo tee /etc/systemd/system/containerd.service.d/00-runtime-slice.conf
+[Service]
+Slice=runtime.slice
+EOF
+fi
+
 cat << EOF | sudo tee /etc/systemd/system/containerd.service.d/10-compat-symlink.conf
 [Service]
 ExecStartPre=/bin/ln -sf /run/containerd/containerd.sock /run/dockershim.sock
@@ -190,6 +202,12 @@ net.bridge.bridge-nf-call-ip6tables = 1
 net.bridge.bridge-nf-call-iptables = 1
 net.ipv4.ip_forward = 1
 EOF
+
+###############################################################################
+### Nerdctl setup #############################################################
+###############################################################################
+
+sudo yum install -y nerdctl
 
 ################################################################################
 ### Docker #####################################################################
@@ -437,6 +455,7 @@ if [[ "$CACHE_CONTAINER_IMAGES" == "true" ]] && ! [[ ${ISOLATED_REGIONS} =~ $BIN
     ${VPC_CNI_IMGS[@]+"${VPC_CNI_IMGS[@]}"}
   )
   PULLED_IMGS=()
+  REGIONS=$(aws ec2 describe-regions --all-regions --output text --query 'Regions[].[RegionName]')
 
   for img in "${CACHE_IMGS[@]}"; do
     ## only kube-proxy-minimal is vended for K8s 1.24+
@@ -461,12 +480,13 @@ if [[ "$CACHE_CONTAINER_IMAGES" == "true" ]] && ! [[ ${ISOLATED_REGIONS} =~ $BIN
   done
 
   #### Tag the pulled down image for all other regions in the partition
-  for region in $(aws ec2 describe-regions --all-regions | jq -r '.Regions[] .RegionName'); do
+  for region in ${REGIONS[*]}; do
     for img in "${PULLED_IMGS[@]}"; do
-      regional_img="${img/$BINARY_BUCKET_REGION/$region}"
+      region_uri=$(/etc/eks/get-ecr-uri.sh "${region}" "${AWS_DOMAIN}")
+      regional_img="${img/$ECR_URI/$region_uri}"
       sudo ctr -n k8s.io image tag "${img}" "${regional_img}" || :
       ## Tag ECR fips endpoint for supported regions
-      if [[ "${region}" =~ (us-east-1|us-east-2|us-west-1|us-west-2|us-gov-east-1|us-gov-east-2) ]]; then
+      if [[ "${region}" =~ (us-east-1|us-east-2|us-west-1|us-west-2|us-gov-east-1|us-gov-west-1) ]]; then
         regional_fips_img="${regional_img/.ecr./.ecr-fips.}"
         sudo ctr -n k8s.io image tag "${img}" "${regional_fips_img}" || :
         sudo ctr -n k8s.io image tag "${img}" "${regional_fips_img/-eksbuild.1/}" || :
@@ -486,23 +506,22 @@ if [[ "$CACHE_CONTAINER_IMAGES" == "true" ]] && ! [[ ${ISOLATED_REGIONS} =~ $BIN
   ecr_password=$(aws ecr get-login-password --region "eu-central-1")
 
   # kubectl -n kube-system -o json get deployment coredns | jq -r '.spec.template.spec.containers[] | "sudo ctr --namespace k8s.io image pull "+ .image'
-  sudo ctr --namespace k8s.io image pull public.ecr.aws/eks-distro/coredns/coredns:v1.10.1-eks-1-27-6
+  sudo ctr --namespace k8s.io image pull public.ecr.aws/eks-distro/coredns/coredns:v1.10.1-eks-1-28-8
 
   # kubectl -n ingress -o json get deployment traefik | jq -r '.spec.template.spec.containers[] | "sudo ctr --namespace k8s.io image pull "+ .image'
-  sudo ctr --namespace k8s.io image pull ghcr.io/sylr/traefik:v2.10.1_sylr.1
-  sudo ctr --namespace k8s.io image pull ghcr.io/sylr/traefik:v2.10.4_sylr.1
+  sudo ctr --namespace k8s.io image pull ghcr.io/sylr/traefik:v2.10.5_sylr.1
   
   # kubectl get daemonset -o json --all-namespaces | jq -r '.items[].spec.template.spec.containers[] | "sudo ctr --namespace k8s.io image pull "+ .image' | sort
   sudo ctr --namespace k8s.io image pull public.ecr.aws/aws-ec2/aws-node-termination-handler:v1.20.0
-  sudo ctr --namespace k8s.io image pull public.ecr.aws/aws-observability/aws-for-fluent-bit:2.31.12.20230629
-  sudo ctr --namespace k8s.io image pull public.ecr.aws/ebs-csi-driver/aws-ebs-csi-driver:v1.20.0
-  sudo ctr --namespace k8s.io image pull public.ecr.aws/eks-distro/kubernetes-csi/livenessprobe:v2.10.0-eks-1-27-6
-  sudo ctr --namespace k8s.io image pull public.ecr.aws/eks-distro/kubernetes-csi/node-driver-registrar:v2.8.0-eks-1-27-6
+  sudo ctr --namespace k8s.io image pull public.ecr.aws/aws-observability/aws-for-fluent-bit:2.32.0
+  sudo ctr --namespace k8s.io image pull public.ecr.aws/ebs-csi-driver/aws-ebs-csi-driver:v1.24.1
+  sudo ctr --namespace k8s.io image pull public.ecr.aws/eks-distro/kubernetes-csi/livenessprobe:v2.11.0-eks-1-28-8
+  sudo ctr --namespace k8s.io image pull public.ecr.aws/eks-distro/kubernetes-csi/node-driver-registrar:v2.9.0-eks-1-28-8
   sudo ctr --namespace k8s.io image pull quay.io/cilium/cilium:v1.13.4
   sudo ctr --namespace k8s.io image pull quay.io/cilium/cilium:v1.13.6
   sudo ctr --namespace k8s.io image pull quay.io/cilium/startup-script:62093c5c233ea914bfa26a10ba41f8780d9b737f
   sudo ctr --namespace k8s.io image pull quay.io/prometheus/node-exporter:v1.6.1
-  sudo ctr --namespace k8s.io image pull quay.io/signalfx/splunk-otel-collector:0.75.0
+  sudo ctr --namespace k8s.io image pull quay.io/signalfx/splunk-otel-collector:v0.86.0
 
 fi
 
@@ -548,6 +567,7 @@ EOF
 echo fs.inotify.max_user_watches=524288 | sudo tee -a /etc/sysctl.conf
 echo fs.inotify.max_user_instances=8192 | sudo tee -a /etc/sysctl.conf
 echo vm.max_map_count=524288 | sudo tee -a /etc/sysctl.conf
+echo 'kernel.pid_max=4194304' | sudo tee -a /etc/sysctl.conf
 
 ################################################################################
 ### adding log-collector-script ################################################
