@@ -20,7 +20,7 @@ export LANG="C"
 export LC_ALL="C"
 
 # Global options
-readonly PROGRAM_VERSION="0.7.7"
+readonly PROGRAM_VERSION="0.7.8"
 readonly PROGRAM_SOURCE="https://github.com/awslabs/amazon-eks-ami/blob/main/log-collector-script/"
 readonly PROGRAM_NAME="$(basename "$0" .sh)"
 readonly PROGRAM_DIR="/opt/log-collector"
@@ -313,6 +313,7 @@ get_mounts_info() {
   lvs > "${COLLECT_DIR}"/storage/lvs.txt
   pvs > "${COLLECT_DIR}"/storage/pvs.txt
   vgs > "${COLLECT_DIR}"/storage/vgs.txt
+  cp --force /etc/fstab "${COLLECT_DIR}"/storage/fstab.txt
   mount -t xfs | awk '{print $1}' | xargs -I{} -- sh -c "xfs_info {}; xfs_db -r -c 'freesp -s' {}" > "${COLLECT_DIR}"/storage/xfs.txt
   mount | grep ^overlay | sed 's/.*upperdir=//' | sed 's/,.*//' | xargs -n 1 timeout 75 du -sh | grep -v ^0 > "${COLLECT_DIR}"/storage/pod_local_storage.txt
   ok
@@ -714,6 +715,16 @@ get_system_services() {
   timeout 75 netstat -plant > "${COLLECT_DIR}"/system/netstat.txt 2>&1
   timeout 75 cat /proc/stat > "${COLLECT_DIR}"/system/procstat.txt 2>&1
   timeout 75 cat /proc/[0-9]*/stat > "${COLLECT_DIR}"/system/allprocstat.txt 2>&1
+
+  # collect pids which have large environments
+  echo -e "PID\tCount" > "${COLLECT_DIR}/system/large_environments.txt"
+  for i in /proc/*/environ; do
+    ENV_COUNT=$(tr '\0' '\n' < "$i" | grep -cv '^$')
+    if ((ENV_COUNT > 1000)); then
+      PID=$(echo "$i" | sed 's#/proc/##' | sed 's#/environ##')
+      echo -e "${PID}\t${ENV_COUNT}" >> "${COLLECT_DIR}/system/large_environments.txt"
+    fi
+  done
 
   ok
 }
