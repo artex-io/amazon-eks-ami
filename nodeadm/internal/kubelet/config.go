@@ -262,11 +262,11 @@ func (ksc *kubeletConfig) withCloudProvider(kubeletVersion string, cfg *api.Node
 func (ksc *kubeletConfig) withDefaultReservedResources(cfg *api.NodeConfig) {
 	ksc.SystemReservedCgroup = ptr.String("/system")
 	ksc.KubeReservedCgroup = ptr.String("/runtime")
-	maxPods, ok := MaxPodsPerInstanceType[cfg.Status.Instance.Type]
-	if !ok {
-		ksc.MaxPods = CalcMaxPods(cfg.Status.Instance.Region, cfg.Status.Instance.Type)
-	} else {
+	if maxPods, ok := MaxPodsPerInstanceType[cfg.Status.Instance.Type]; ok {
+		// #nosec G115 // known source from ec2 apis within int32 range
 		ksc.MaxPods = int32(maxPods)
+	} else {
+		ksc.MaxPods = CalcMaxPods(cfg.Status.Instance.Region, cfg.Status.Instance.Type)
 	}
 	ksc.KubeReserved = map[string]string{
 		"cpu":               fmt.Sprintf("%dm", getCPUMillicoresToReserve()),
@@ -379,7 +379,7 @@ func (k *kubelet) writeKubeletConfigToDir(cfg *api.NodeConfig) error {
 		k.flags["config-dir"] = dirPath
 
 		zap.L().Info("Enabling kubelet config drop-in dir..")
-		k.setEnv("KUBELET_CONFIG_DROPIN_DIR_ALPHA", "on")
+		k.environment["KUBELET_CONFIG_DROPIN_DIR_ALPHA"] = "on"
 		filePath := path.Join(dirPath, "00-nodeadm.conf")
 
 		// merge in default type metadata like kind and apiVersion in case the

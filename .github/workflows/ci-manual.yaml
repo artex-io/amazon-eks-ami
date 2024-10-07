@@ -31,8 +31,8 @@ on:
         required: false
         type: string
       k8s_versions:
-        description: 'Kubernetes Versions (comma-separated, e.g., 1.21,1.22)'
-        default: "1.21,1.22,1.23,1.24,1.25,1.26,1.27,1.28,1.29,1.30"
+        description: 'Kubernetes Versions (comma-separated, e.g., 1.29,1.30)'
+        default: "1.23,1.24,1.25,1.26,1.27,1.28,1.29,1.30"
         required: false
         type: string
       build_arguments:
@@ -88,14 +88,8 @@ jobs:
       matrix:
         k8s_version: ${{ fromJson(needs.setup.outputs.kubernetes_versions) }}
         os_distro: ${{ fromJson(needs.setup.outputs.os_distros) }}
-        # al2023 is not supporting 1.22 and below, exclude them from CI
-        exclude:
-          - os_distro: al2023
-            k8s_version: 1.21
-          - os_distro: al2023
-            k8s_version: 1.22
     steps:
-      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # 4.1.7
+      - uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938 # 4.2.0
         with:
           ref: 'main'
       - uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # 4.0.2
